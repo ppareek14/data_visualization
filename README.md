@@ -1,4 +1,5 @@
 # data_visualization hello im Isaac
+HELLO CAN YOU SEE THE CHANGES!
 Objectives:
 
 For our final project, we want to investigate how the pandemic affected public health and safety in other indirect ways. We are using datasets from ‘Data for A Pandemic of Mental Health’ [1]. The key questions we are addressing are: how did the pandemic impact gun violence in America and which demographics were most impacted concerning mental health, depression, and anxiety? 
