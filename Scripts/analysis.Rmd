@@ -1,0 +1,259 @@
+```{r}
+library(tidyverse)
+library(wbstats)
+library(lubridate)
+library(skimr)
+library(countrycode)
+library(here)
+library(scales)
+library(wbstats)
+
+
+library(plotly)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(patchwork)
+library(mapview)
+library(tmap)
+
+
+library(showtext)
+library(ggtext)
+library(viridis)
+```
+
+```{r}
+data <- read_delim("/Users/isaachasbani/Desktop/LBS/Data Visualization/am10/Group project/data.csv", delim = "#")
+glimpse(data)
+```
+
+
+```{r}
+summary(data)
+```
+
+```{r}
+missing_values <- data %>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>% 
+  pivot_longer(everything(), names_to = "column", values_to = "missing_count")
+
+missing_values
+```
+
+```{r}
+#remove missing values
+data <- data %>%
+  filter(complete.cases(.))
+
+# Feature enginneering
+data <- data %>% 
+  rename("Track" = "Track Name") %>% 
+  mutate(
+    Month = month(Date, label = TRUE, abbr = TRUE),
+    Day = day(Date),
+    Year = year(Date),
+    Featuring = ifelse(str_detect(Track, "feat.|Feat."), 1, 0)
+  )
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+data %>% 
+  filter(Track == "All I Want for Christmas Is You") %>%
+  ggplot(aes(x = Date, y = Position)) +
+  geom_line() + 
+  labs(title = "Track Position Over Time", 
+       x = "Date", 
+       y = "Position") +
+  theme_minimal()
+  
+```
+
+```{r}
+#heatmap
+highlight_dates <- data.frame(
+  date_of_month = c(24, 25),
+  month_categorical = factor("Dec")
+)
+
+streams_heat <- data %>% 
+  filter(Date > "2018-01-01" & Date < "2020-01-01") %>% 
+  group_by(Month, Day) %>%
+  summarise(total_streams = sum(Streams)) %>% 
+
+ggplot() +
+  aes(x = Day, y = Month, fill = total_streams) +
+  geom_tile() +
+  scale_fill_distiller(
+    palette = "Greens",
+    name = "Total Streams",
+    direction = 1,
+    labels = scales::label_comma(),
+    guide = guide_colorbar(barwidth = 20, barheight = 0.5, position = "bottom")
+  ) +
+  labs(
+    title = "People Listen to More Music Around Christmas",
+    subtitle = "Analysis of Top 200 Spotify Hits for 2018 and 2019", 
+    caption = "Source: Spotify"
+  ) +
+  scale_x_continuous(
+    breaks = 1:31
+  ) +
+  theme_minimal(base_family = "Lato") +
+  theme(
+    panel.grid = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
+    axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
+    legend.title = element_text(size = 12, hjust = 0.5, color = "#191414", face = "bold"),
+    legend.title.position = "bottom",
+    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
+    plot.subtitle = element_text(size = 12, color = "#191414", face = "bold")
+  )+
+annotate("text", x = 25, y = "Dec", label = "Christmas", 
+         vjust = 2.7, hjust = 0.5, size = 4, color = "#191414", fontface = "bold") +
+geom_tile(
+    data = highlight_dates,
+    aes(x = date_of_month, y = month_categorical),
+    color = "#191414" , fill = NA, size = 1.2
+  ) +
+annotate("text", x = 1, y = "Jan", label = "Too many beers ??!!",vjust = -1.5, hjust = 0, size = 4, color = "#191414", fontface = "bold") +
+geom_tile(
+    aes(x = 1, y = "Jan"),
+    color = "#191414", fill = NA, size = 1.2
+  ) 
+
+streams_heat
+```
+
+```{r}
+tracks_to_highlight <- c("Dance Monkey", "Blinding Lights")
+
+christmas_data <- data %>% 
+  filter(Month == "Dec") %>% 
+  group_by(Month, Track) %>% 
+  summarise(total_streams = sum(Streams)) %>% 
+  arrange(desc(total_streams)) %>% 
+  slice_head(n = 10) %>% 
+   mutate(Track = fct_reorder(Track, total_streams, .desc = TRUE),
+          fill_color = if_else(Track %in% tracks_to_highlight, "#1DB954", "#c60f0f")) %>% 
+  ggplot(aes(x = Track, y = total_streams, fill = fill_color))+
+  geom_col()+
+  scale_fill_identity() + 
+  theme_minimal() +
+  labs(
+    title = "8 of the top 10 songs in December are Christmas-themed",
+    y = "Total Streams",
+    caption = "Source: Spotify"
+  ) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "bold", size = 10, color = "#191414"),
+    axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
+    axis.title = element_blank(),
+    plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
+    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
+   
+    
+  ) +
+  geom_text(aes(label = sprintf("%.2f", total_streams / 1e6)), vjust = -0.5, size = 6) +
+  scale_y_continuous(labels = function(x) sprintf("%.2fM", x / 1e6))
+
+          
+christmas_data
+```
+
+
+```{r}
+daily_streams <- data %>%
+  filter(Year < 2021) %>% 
+  group_by(Date) %>%
+  summarize(total_streams = sum(Streams)) %>% 
+  ggplot(aes(x = Date, y = total_streams)) +
+  geom_line(color = "#1DB954", size = 1) +  
+  geom_smooth(
+    method = "loess", 
+    color = "#191414",
+    size = 1, 
+    se = FALSE)+
+  labs(
+  title = "Daily Total Streams Over Time",
+  caption = "Source: Spotify"
+  ) +
+  theme_minimal() +
+  theme(
+  axis.title = element_blank(),
+  axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
+  axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
+  plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
+  plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
+  
+  )+
+  scale_y_continuous(labels = function(x) sprintf("%.2fM", x / 1e6))
+
+daily_streams
+```
+
+
+
+
+
+```{r}
+
+highlight_dates <- as.Date(c("2018-04-26", "2019-09-05"))
+
+post_malone <- data %>% 
+  filter(Artist == "Post Malone") %>% 
+  group_by(Date) %>% 
+  summarise(count = n())
+
+highlight_counts <- post_malone %>%
+  filter(Date %in% highlight_dates)
+
+post_malone_plot <- ggplot(aes(x = Date, y = count)) +
+  geom_line(size = 1)+
+  labs(
+  title = "Song in the top 200 spike after an album release",
+  subtitle = "Number of Post Malone's song in the top 200 (2017-2021)",
+  caption = "Source: Spotify"
+  ) +
+  theme_minimal()+
+  theme(
+  axis.title = element_blank(),
+  axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
+  axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
+  plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
+  plot.subtitle = element_text(size = 12, face = "bold", color = "#191414"),
+  plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
+  )+
+  scale_x_date(
+    date_labels = "%b\n%Y",
+    date_breaks = "4 month"
+  )+
+  geom_point(data = highlight_dates, aes(x = Date, y = count),
+             color = "#1DB954", size = 3, shape = 21, fill = "white", stroke = 1.5)
+
+
+post_malone_plot
+
+
+```
+
+
+
+
+```{r}
+write.csv(data, "data_cleaned.csv", row.names = FALSE)
+```
+
