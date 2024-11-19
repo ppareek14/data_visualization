@@ -1,39 +1,25 @@
-```{r}
+## Loading relevant libraries
+
+```{r, warning=FALSE, message=FALSE}
 library(tidyverse)
-library(wbstats)
 library(lubridate)
 library(skimr)
-library(countrycode)
-library(here)
-library(scales)
-library(wbstats)
-
-
-library(plotly)
-library(sf)
-library(rnaturalearth)
-library(rnaturalearthdata)
-library(patchwork)
-library(mapview)
-library(tmap)
-
-
-library(showtext)
-library(ggtext)
 library(viridis)
 ```
 
-```{r}
-data <- read_delim("/Users/isaachasbani/Desktop/LBS/Data Visualization/am10/Group project/data.csv", delim = "#")
-glimpse(data)
-```
+## Loading the data
 
+```{r, warning=FALSE, message=FALSE}
+data <- read_delim("/Users/isaachasbani/Desktop/LBS/Data Visualization/am10/Group project/data.csv", delim = "#")
+```
 
 ```{r}
 summary(data)
 ```
 
-```{r}
+## Check for missing values
+
+```{r, warning=FALSE, message=FALSE}
 missing_values <- data %>%
   summarise(across(everything(), ~ sum(is.na(.)))) %>% 
   pivot_longer(everything(), names_to = "column", values_to = "missing_count")
@@ -41,162 +27,74 @@ missing_values <- data %>%
 missing_values
 ```
 
-```{r}
+## Feature Engineering
+
+```{r, warning=FALSE, message=FALSE}
 #remove missing values
 data <- data %>%
   filter(complete.cases(.))
 
-# Feature enginneering
+# Feature engineering
 data <- data %>% 
+  # Rename "Track Name" column to "Track" for simplicity
   rename("Track" = "Track Name") %>% 
   mutate(
+    # Extract the month from the "Date" column, with abbreviated month names (e.g., "Jan", "Feb")
     Month = month(Date, label = TRUE, abbr = TRUE),
+    
+    # Extract the day of the month from the "Date" column
     Day = day(Date),
+    
+    # Extract the year from the "Date" column
     Year = year(Date),
+    
+    # Create a binary variable "Featuring" to indicate if the track has a featured artist
+    # It checks if the track name contains "feat." or "Feat." using `str_detect()`
     Featuring = ifelse(str_detect(Track, "feat.|Feat."), 1, 0)
   )
-
-
-
-
 ```
 
+## Get an idea of the how the the streams of the top 200 songs are increasing over time
 
-
-
-
-
-```{r}
-data %>% 
-  filter(Track == "All I Want for Christmas Is You") %>%
-  ggplot(aes(x = Date, y = Position)) +
-  geom_line() + 
-  labs(title = "Track Position Over Time", 
-       x = "Date", 
-       y = "Position") +
-  theme_minimal()
-  
-```
-
-```{r}
-#heatmap
-highlight_dates <- data.frame(
-  date_of_month = c(24, 25),
-  month_categorical = factor("Dec")
-)
-
-streams_heat <- data %>% 
-  filter(Date > "2018-01-01" & Date < "2020-01-01") %>% 
-  group_by(Month, Day) %>%
-  summarise(total_streams = sum(Streams)) %>% 
-
-ggplot() +
-  aes(x = Day, y = Month, fill = total_streams) +
-  geom_tile() +
-  scale_fill_distiller(
-    palette = "Greens",
-    name = "Total Streams",
-    direction = 1,
-    labels = scales::label_comma(),
-    guide = guide_colorbar(barwidth = 20, barheight = 0.5, position = "bottom")
-  ) +
-  labs(
-    title = "People Listen to More Music Around Christmas",
-    subtitle = "Analysis of Top 200 Spotify Hits for 2018 and 2019", 
-    caption = "Source: Spotify"
-  ) +
-  scale_x_continuous(
-    breaks = 1:31
-  ) +
-  theme_minimal(base_family = "Lato") +
-  theme(
-    panel.grid = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
-    axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
-    legend.title = element_text(size = 12, hjust = 0.5, color = "#191414", face = "bold"),
-    legend.title.position = "bottom",
-    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
-    plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
-    plot.subtitle = element_text(size = 12, color = "#191414", face = "bold")
-  )+
-annotate("text", x = 25, y = "Dec", label = "Christmas", 
-         vjust = 2.7, hjust = 0.5, size = 4, color = "#191414", fontface = "bold") +
-geom_tile(
-    data = highlight_dates,
-    aes(x = date_of_month, y = month_categorical),
-    color = "#191414" , fill = NA, size = 1.2
-  ) +
-annotate("text", x = 1, y = "Jan", label = "Too many beers ??!!",vjust = -1.5, hjust = 0, size = 4, color = "#191414", fontface = "bold") +
-geom_tile(
-    aes(x = 1, y = "Jan"),
-    color = "#191414", fill = NA, size = 1.2
-  ) 
-
-streams_heat
-```
-
-```{r}
-tracks_to_highlight <- c("Dance Monkey", "Blinding Lights")
-
-christmas_data <- data %>% 
-  filter(Month == "Dec") %>% 
-  group_by(Month, Track) %>% 
-  summarise(total_streams = sum(Streams)) %>% 
-  arrange(desc(total_streams)) %>% 
-  slice_head(n = 10) %>% 
-   mutate(Track = fct_reorder(Track, total_streams, .desc = TRUE),
-          fill_color = if_else(Track %in% tracks_to_highlight, "#1DB954", "#c60f0f")) %>% 
-  ggplot(aes(x = Track, y = total_streams, fill = fill_color))+
-  geom_col()+
-  scale_fill_identity() + 
-  theme_minimal() +
-  labs(
-    title = "8 of the top 10 songs in December are Christmas-themed",
-    y = "Total Streams",
-    caption = "Source: Spotify"
-  ) +
-  theme(
-    panel.grid = element_blank(),
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "bold", size = 10, color = "#191414"),
-    axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
-    axis.title = element_blank(),
-    plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
-    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
-   
-    
-  ) +
-  geom_text(aes(label = sprintf("%.2f", total_streams / 1e6)), vjust = -0.5, size = 6) +
-  scale_y_continuous(labels = function(x) sprintf("%.2fM", x / 1e6))
-
-          
-christmas_data
-```
-
-
-```{r}
+```{r, warning=FALSE, message=FALSE}
 daily_streams <- data %>%
+  
+  # Filter out 2021 as we only have incomplete data (Jan to Jul)
   filter(Year < 2021) %>% 
-  group_by(Date) %>%
-  summarize(total_streams = sum(Streams)) %>% 
+  
+  # Group the data by 'Date' to get daily streams
+  group_by(Date) %>% 
+  
+  # Calculate total streams per day
+  summarize(total_streams = sum(Streams)) %>%
+  
   ggplot(aes(x = Date, y = total_streams)) +
   geom_line(color = "#1DB954", size = 1) +  
+  
+  # Add a smoothed line to show the trend
   geom_smooth(
+    
+    # Use LOESS method for smoothing (locally weighted regression)
     method = "loess", 
     color = "#191414",
+    
+    # Disable confidence interval shading around the smooth line
     size = 1, 
     se = FALSE)+
   labs(
-  title = "Daily Total Streams Over Time",
+  title = "Total streams of the Top-200 are increasing over time",
+  subtitle = "Period: 2017-2021",
   caption = "Source: Spotify"
   ) +
   theme_minimal() +
+  
+  # Customize the appearance of axis titles and text with Spotify colors
   theme(
   axis.title = element_blank(),
   axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
   axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
   plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
+  plot.subtitle = element_text(size = 12, face = "bold", color = "#191414"),
   plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
   
   )+
@@ -205,55 +103,544 @@ daily_streams <- data %>%
 daily_streams
 ```
 
+## Is this increase consistent for all genres?
+
+```{r, warning=FALSE, message=FALSE}
+data <- data %>%
+  
+  # Data Preprocessing
+  
+  # Step 1: Clean the Genre column to remove unwanted characters and extract the first genre from the list
+  
+  mutate(Genre = sub("^\\['([^']+)'.*$", "\\1", Genre)) %>%
+  
+  # Step 2: Create a new column 'genre_group' to categorize genres into broader groups
+  mutate(
+      genre_group = case_when(
+      
+      # Identify key words and categorize genres into Electronic, Pop, Hip Hop, Rock, Classical, and Latin
+      str_detect(Genre, "dance|edm|house") ~ "Electronic",
+      str_detect(Genre, "pop") ~ "Pop",
+      str_detect(Genre, "rap|hip hop|trap") ~ "Hip Hop",
+      str_detect(Genre, "rock") ~ "Rock",
+      str_detect(Genre, "classical|orchestral") ~ "Classical",
+      str_detect(Genre, "latin|reggaeton") ~ "Latin",
+      
+      # For genres not covered in specific groups
+      TRUE ~ "Other"
+    )
+  ) %>%
+
+  # Step 3: Remove rows from 2021, as we only have incomplete data
+  filter(Year != 2021) 
+
+# Step 4: CCreate monthly trends for each genre group
+monthly_genre_trends <- data %>%
+  
+  # Round each date to the start of the month 
+  mutate(Month_floor = floor_date(Date, unit = "month")) %>% 
+  
+  # Group by the rounded month (Month_floor) and genre group
+  group_by(Month_floor, genre_group) %>% 
+  
+  # Total streams per month
+  summarise(total_streams = sum(Streams)) %>%
+  ungroup() %>%
+  
+  # Step 5: Calculate the proportion of total streams for each genre group in each month
+  group_by(Month_floor) %>%
+  
+  # Calculate proportions
+  mutate(proportion_streams = total_streams / sum(total_streams, na.rm = TRUE)) %>% 
+  ungroup()
+
+# Step 6: Calculate the initial proportion for each genre group at the start of the period
+initial_proportions <- monthly_genre_trends %>%
+  group_by(genre_group) %>%
+  
+  # Find the earliest month for each genre
+  filter(Month_floor == min(Month_floor)) %>% 
+  
+  # Average if there are duplicates
+  summarise(initial_proportion = mean(proportion_streams, na.rm = TRUE)) %>% 
+  
+  # Sort by initial proportion in descending order
+  arrange(desc(initial_proportion)) 
+
+# Step 7: Reorder genre groups based on their initial proportion to maintain a consistent color scheme
+monthly_genre_trends <- monthly_genre_trends %>%
+  mutate(
+    genre_group = factor(genre_group, levels = initial_proportions$genre_group)
+  )
+
+ggplot(monthly_genre_trends, aes(x = Month_floor, y = proportion_streams, fill = genre_group)) +
+  
+  # Use an area chart to visualize the proportions of streams for each genre over time
+  geom_area(alpha = 0.7) +  # White borders for clarity
+  labs(
+    title = "Pop dominates the music scene in the late 2010s",
+    x = "",
+    y = "Proportion of Total Streams",
+    caption = "Source: Spotify"
+  ) +
+  
+  # Percent y-axis and remove gaps
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  
+  # Remove gaps on x-axis
+  scale_x_date(expand = c(0, 0)) +
+  
+   # Use a clear color palette for genres
+  scale_fill_brewer(palette = "Set3") +
+  
+  # Use a classic, clean theme
+  theme_classic() +
+  
+  # Customize the appearance of axis titles and text with Spotify colors
+  theme(
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold",, color = "#1DB954"),
+    plot.caption = element_text(size = 10, face = "bold", hjust = 1, color = "#1DB954"), # Green caption
+    legend.position = "right",
+    legend.title = element_blank()
+  )
+```
+
+## How do the listening change over the year?
+
+```{r, warning=FALSE, message=FALSE}
+# Heat Map
 
 
+# We create a data frame with information about the tiles we want to highlight
+
+highlight_dates <- data.frame(
+  
+  # Dates for Christmas eve and day
+  date_of_month = c(24, 25),
+  
+  # Dates are in December
+  month_categorical = factor("Dec")
+)
 
 
-```{r}
+# Data Transformation:
+data %>% 
+  
+  # Filter out 2021 due to incomplete data
+  filter(Year != 2021) %>% 
+  
+  # We want our calculations to be on a daily basis for each month
+  group_by(Month, Day) %>%
+  
+  # Calculate the total streams for each day of every month
+  summarise(total_streams = sum(Streams)) %>%
+  
 
-highlight_dates <- as.Date(c("2018-04-26", "2019-09-05"))
+# Plotting
+  
+  ggplot() + 
+  
+  aes(x = Day, 
+      y = Month, 
+      fill = total_streams) +
+  
+  # Heatmap with white borders
+  geom_tile(color = "white") +
+  
+  # Viridis color scale (continuous) with reversed direction for better highlights
+  scale_fill_viridis_c(
+    name = "Total Streams",
+    option = "viridis",
+    direction = -1,
+    labels = scales::label_comma(),
+    guide = guide_colorbar(
+      barwidth = 20, barheight = 0.3, position = "bottom"
+    )
+  ) +
+  
+  # Adding titles and caption
+  labs(
+    title = "Spotify Streaming Peaks Around Christmas",
+    subtitle = "Daily streaming of top 200 Spotify hits (2017 - 2020)",
+    caption = "Source: Spotify"
+  ) +
+  
+  # Ensure x-axis displays all days in the month
+  scale_x_continuous( breaks = 1:31) +
+  
+  # Minimal theme for a clean plot
+  theme_minimal(base_family = "Lato") +
+  
+  # Customize plot elements for Spotify colors
+  theme(
+    panel.grid = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_text(size = 7, color = "#191414"),
+    axis.text.y = element_text(size = 8, color = "#191414"),
+    legend.title = element_text(size = 10, hjust = 0.5, color = "#191414", face = "bold"),
+    legend.title.position = "bottom",
+    legend.text = element_text(size = 5, color = "#191414", hjust = 0.5),
+    plot.caption = element_text(size = 8, color = "#1DB954", hjust = 1, face = "bold"),
+    plot.title = element_text(size = 10, face = "bold", color = "#1DB954"),
+    plot.subtitle = element_text(size = 9, color = "#191414")
+  ) +
+  
+  # Highlight tiles for Dec 24 and Dec 25
+  geom_tile(
+    data = highlight_dates,
+    aes(x = date_of_month, y = month_categorical),
+    color = "red", fill = NA, size = 1.1)
+```
 
+## December trends
+
+```{r, warning=FALSE, message=FALSE}
+# Define tracks to highlight
+tracks_to_highlight <- c("Dance Monkey", "Blinding Lights")
+
+# Prepare and plot the data
+christmas_data <- data %>% 
+  # Filter the data to include only December (Month == "Dec")
+  filter(Month == "Dec") %>% 
+  
+  # Group the data by 'Month' and 'Track' to calculate total streams for each track in December
+  group_by(Month, Track) %>% 
+  
+  # Summarize the data to get the total streams for each track
+  summarise(total_streams = sum(Streams), .groups = 'drop') %>% 
+  
+  # Arrange the data in descending order of total streams
+  arrange(desc(total_streams)) %>% 
+  
+  # Select the top 10 tracks based on total streams
+  slice_head(n = 10) %>% 
+  
+  # Reorder the 'Track' factor by 'total_streams' to ensure the bars are ordered in descending order
+  mutate(
+    Track = fct_reorder(Track, total_streams, .desc = TRUE),
+    
+    # Create a new column 'Category' to classify tracks into 'Christmas Themed Song' or 'Other Song'
+    # If the track is in the 'tracks_to_highlight' list, it will be labeled as "Other Song"
+    Category = if_else(Track %in% tracks_to_highlight, "Other Song", "Christmas Themed Song")
+  ) %>% 
+  
+  # Create the plot
+  ggplot(aes(x = Track, y = total_streams, fill = Category)) +
+  
+  # Create a bar plot with columns
+  geom_col() +
+  
+  # Customize the fill color of the bars based on the 'Category' variable
+  scale_fill_manual(
+    name = "Song Category",
+    values = c("Christmas Themed Song" = "#c60f0f", "Other Song" = "#1DB954")  # Red for Christmas songs, green for others
+  ) + 
+  
+  # Apply a minimal theme (no gridlines, simple style)
+  theme_minimal() +
+  
+  # Add labels, title, and caption to the plot
+  labs(
+    title = "8 of the Top 10 Songs in December are Christmas-Themed",  # Title of the plot
+    y = "Total Streams",  # Label for the y-axis
+    caption = "Source: Spotify"  # Data source caption
+  ) +
+  
+  # Customize the appearance of the plot for Spotify colors
+  theme(
+    panel.grid = element_blank(),  # Remove gridlines
+    axis.text.x = element_text(
+      angle = 45, hjust = 1, vjust = 1, 
+      face = "bold", size = 14, color = "#191414" 
+    ),
+    axis.text.y = element_text(
+      face = "bold", size = 12, color = "#191414" 
+    ),
+    axis.title = element_blank(),  # Remove axis titles (no need for them here)
+    plot.title = element_text(
+      size = 18, face = "bold", color = "#1DB954" 
+    ),
+    plot.caption = element_text(
+      size = 12, color = "#1DB954", 
+      hjust = 1, face = "bold"
+    )
+  ) +
+  
+  # Add labels on top of each bar displaying the total streams in millions
+  geom_text(
+    aes(label = sprintf("%.2fM", total_streams / 1e6)),  # Format the stream count in millions with 2 decimals
+    vjust = -0.5, size = 5  # Position the labels slightly above the bars
+  ) +
+  
+  # Format the y-axis labels to display numbers in millions with commas
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-6, suffix = "M"))
+
+christmas_data  # Show the plot created
+```
+
+## Featuring vs Solo songs. Which ones perform better?
+
+### Monthly data
+
+```{r, warning=FALSE, message=FALSE}
+# Calculate monthly stats with confidence intervals
+monthly_ci <- data %>%
+  
+  # Group by month and whether the song features an artist (used our binary variable)
+  group_by(Month, Featuring) %>%
+  summarize(
+    Average_Streams = mean(Streams),
+    Lower_CI = mean(Streams) - 1.96 * (sd(Streams) / sqrt(n())),
+    Upper_CI = mean(Streams) + 1.96 * (sd(Streams) / sqrt(n())),
+    .groups = 'drop'
+  )
+
+# Plot with shaded confidence intervals
+# Correct labeling and consistent mapping for Featuring
+monthly_ci$Featuring <- factor(monthly_ci$Featuring, levels = c(1, 0), labels = c("Featuring", "Solo"))
+
+# Plot with corrected labels and white background
+# Plot with no legend title
+monthly_ci_plot <- ggplot(monthly_ci, aes(x = Month, y = Average_Streams, color = Featuring, group = Featuring)) +
+  
+  # Shaded confidence area
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI, fill = Featuring), alpha = 0.2, color = NA) + 
+  
+  # Line graph
+  geom_line(size = 1.5, alpha = 0.8) + 
+  
+  # Stylish points
+  geom_point(size = 4, shape = 21, fill = "white", stroke = 1.5) + 
+  
+  # Customize the color scheme for Featuring and Solo
+  scale_color_manual(values = c("Featuring" = "#1DB954", "Solo" = "#191414"), name = NULL) + # Remove legend title
+  scale_fill_manual(values = c("Featuring" = "#1DB954", "Solo" = "#191414"), name = NULL) + # Remove legend title
+  labs(
+    title = "Featurings Heat Up Summer, Solo Songs Chill Christmas",
+    caption = "Source: Spotify"
+  ) +
+  theme_minimal() +
+  
+  # Customize the appearance of the plot elements
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12, color = "#191414", face = "bold"),
+    axis.text.y = element_text(size = 12, color = "#191414", face = "bold"),
+    axis.title = element_blank(), # Removes axis titles
+    plot.title = element_text(size = 14, face = "bold", color = "#1DB954"),
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#FFFFFF", color = NA),
+    plot.background = element_rect(fill = "#FFFFFF", color = NA),
+    legend.background = element_rect(fill = "#FFFFFF"),
+    legend.key = element_rect(fill = "#FFFFFF"),
+    legend.text = element_text(color = "#191414", size = 12),
+    legend.position = "bottom",
+    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold")
+  )+
+  
+  # Format the y axis to display stream numbers in millions
+  scale_y_continuous(labels = function(x) sprintf("%.2fM", x / 1e6))
+
+monthly_ci_plot
+```
+
+### Yearly data
+
+```{r, warning=FALSE, message=FALSE}
+yearly_ci <- data %>%
+  
+  # Detect 'feat.' or 'Feat.' in track names and label accordingly
+  mutate(Featuring = ifelse(str_detect(Track, "feat.|Feat."), 1, 0)) %>% # Adjusted column name
+  
+  # Group the data by Year and whether the song is Featuring or Solo
+  group_by(Year = year(Date), Featuring) %>%
+  
+  # Summarize the data by calculating average streams and confidence intervals for each year and category
+  summarize(
+    Average_Streams = mean(Streams),
+    Lower_CI = mean(Streams) - 1.96 * (sd(Streams) / sqrt(n())),
+    Upper_CI = mean(Streams) + 1.96 * (sd(Streams) / sqrt(n())),
+    .groups = 'drop'
+  )
+
+# Adjust the 'Featuring' column to be a factor with custom labels for better readability in the plot
+yearly_ci$Featuring <- factor(yearly_ci$Featuring, levels = c(1, 0), labels = c("Featuring", "Solo"))
+
+# Create the yearly plot
+yearly_ci_plot <- ggplot(yearly_ci, aes(x = Year, y = Average_Streams, color = Featuring, group = Featuring)) +
+  
+  # Shaded confidence area
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI, fill = Featuring), alpha = 0.2, color = NA) + 
+  
+  # Line graph
+  geom_line(size = 1.5, alpha = 0.8) + 
+  
+  # Stylish points
+  geom_point(size = 4, shape = 21, fill = "white", stroke = 1.5) + 
+  
+  # Customize the color scheme for Featuring and Solo
+  scale_color_manual(values = c("Featuring" = "#1DB954", "Solo" = "#191414")) +
+  scale_fill_manual(values = c("Featuring" = "#1DB954", "Solo" = "#191414")) +
+  labs(
+    title = "Featurings have over performed solo songs after COVID-19",
+    caption = "Source: Spotify",
+    color = NULL,    # Removes the color legend title
+    fill = NULL      # Removes the fill legend title
+  ) +
+  theme_minimal() +
+  
+  # Customize for Spotify colors
+  theme(
+    axis.text.x = element_text(size = 12, color = "#191414", face = "bold"),
+    axis.text.y = element_text(size = 12, color = "#191414", face = "bold"),
+    axis.title = element_blank(), # Removes axis titles
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold", color = "#1DB954"),
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#FFFFFF", color = NA),
+    plot.background = element_rect(fill = "#FFFFFF", color = NA),
+    legend.background = element_rect(fill = "#FFFFFF"),
+    legend.key = element_rect(fill = "#FFFFFF"),
+    legend.text = element_text(color = "#191414", size = 12),
+    # Remove the legend titles by setting them to NULL
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold")
+  ) +
+  scale_y_continuous(labels = function(x) sprintf("%.2fM", x / 1e6))
+
+yearly_ci_plot
+
+```
+
+### Who is the top performing artist during the period?
+
+```{r, warning=FALSE, message=FALSE}
+# Sum total streams per artist and get the top 10
+top_artists <- data %>%
+  group_by(Artist) %>%
+  summarize(total_streams = sum(Streams)) %>%
+  top_n(10, total_streams)
+
+# Plot with Spotify colors
+
+# Convert streams to billions
+ggplot(top_artists, aes(x = reorder(Artist, total_streams), y = total_streams / 1e9)) + 
+  
+  # Spotify green color
+  geom_bar(stat = "identity", fill = "#1DB954") + 
+  
+  # Add 'B' for billions
+  geom_text(aes(label = paste0(scales::comma(total_streams / 1e9, accuracy = 0.01), "B")),
+            # Bold labels
+            hjust = -0.2, size = 3.5, color = "black", fontface = "bold") + 
+  coord_flip() +
+  labs(
+    title = "Post Malone was the most streamed artist from 2017 to 2021",
+    
+    # Remove the x-axis caption
+    x = "", 
+    
+    # Remove the y-axis label
+    y = "", 
+    
+    # Add source caption
+    caption = "Source: Spotify" 
+  ) +
+  
+  # Use Arial font
+  theme_minimal(base_family = "Arial") +
+  theme(
+    plot.background = element_blank(),      # White background
+    panel.background = element_blank(),     # White panel
+    text = element_text(color = "black"),                # Black text
+    axis.text.x = element_blank(),          # Remove x-axis text
+    axis.ticks.x = element_blank(),         # Remove x-axis ticks
+    axis.line.x = element_blank(),          # Remove x-axis line
+    axis.title.y = element_blank(),         # Remove y-axis title
+    axis.title.x = element_blank(),         # Remove x-axis title
+    axis.text.y = element_text(face = "bold"), # Make y-axis text (artists) bold
+    plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),  # Spotify green for title
+     plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"), # Green caption
+    legend.position = "none"                             # Remove legend if any
+  )
+```
+
+### What causes Post Malone's streams to increase?
+
+```{r, warning=FALSE, message=FALSE}
+
+# These are the dates when Post Malone's albums were released:
+# Dates of "Beerbongs & Bentleys" and "Hollywood's Bleeding"
+highlight_dates <- as.Date(c("2018-04-20", "2019-08-27"))
+
+# Filter data for Post Malone and calculate daily song counts in the Top 200
 post_malone <- data %>% 
   filter(Artist == "Post Malone") %>% 
   group_by(Date) %>% 
   summarise(count = n())
 
+# Create a new dataframe with the highlight dates and labels for the album releases
 highlight_counts <- post_malone %>%
-  filter(Date %in% highlight_dates)
+  filter(Date %in% highlight_dates) %>% 
+  mutate(label = c("Album Release:\nBeerbongs & Bentleys", "Album Release:\nHollywood's bleeding"))
 
-post_malone_plot <- ggplot(aes(x = Date, y = count)) +
-  geom_line(size = 1)+
-  labs(
-  title = "Song in the top 200 spike after an album release",
-  subtitle = "Number of Post Malone's song in the top 200 (2017-2021)",
-  caption = "Source: Spotify"
+# Create the plot to visualize Post Malone's song counts and highlight the album release dates
+post_plot <- ggplot(post_malone, aes(x = Date, y = count)) +
+  
+  # Add a line graph to show the trend of the number of Post Malone songs in the Top 200 over time
+  geom_line(size = 1, color = "#1DB954") +
+  
+  # Highlight the specific dates (album releases) with red points
+  geom_point(
+    data = highlight_counts, 
+    aes(x = Date, y = count), 
+    shape = 21,          
+    color = "red",       
+    fill = NA,      
+    size = 8,             
+    stroke = 0.8         
   ) +
-  theme_minimal()+
+  
+  # Add text labels next to the points to indicate the album releases
+  geom_text(
+    data = highlight_counts,
+    aes(x = Date, y = count, label = label),
+    vjust = 2,            
+    hjust = 0,           
+    color = "red",
+    size = 3,
+    fontface = "bold") + 
+  labs(
+    title = "Songs in the Top 200 Spike After an Album Release",
+    subtitle = "Number of Post Malone's Songs in the Top 200 (2017-2021)", 
+    caption = "Source: Spotify"
+  ) +
+  theme_minimal() +
+  
+  # Customize axis labels, title, and gridlines for Spotify colors
   theme(
-  axis.title = element_blank(),
-  axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
-  axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
-  plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
-  plot.subtitle = element_text(size = 12, face = "bold", color = "#191414"),
-  plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold"),
-  )+
+    axis.title = element_blank(),
+    axis.text.x = element_text(face = "bold", size = 10, color = "#191414"),
+    axis.text.y = element_text(face = "bold", size = 10, color = "#191414"),
+    plot.title = element_text(size = 16, face = "bold", color = "#1DB954"),
+    plot.subtitle = element_text(size = 12, face = "bold", color = "#191414"),
+    plot.caption = element_text(size = 12, color = "#1DB954", hjust = 1, face = "bold")
+  ) +
   scale_x_date(
     date_labels = "%b\n%Y",
-    date_breaks = "4 month"
-  )+
-  geom_point(data = highlight_dates, aes(x = Date, y = count),
-             color = "#1DB954", size = 3, shape = 21, fill = "white", stroke = 1.5)
+    date_breaks = "4 months" 
+  ) 
 
 
-post_malone_plot
-
-
+post_plot
 ```
 
+### Save the cleaned data in the directory
 
-
-
-```{r}
+```{r, warning=FALSE, message=FALSE}
 write.csv(data, "data_cleaned.csv", row.names = FALSE)
 ```
-
